@@ -41,6 +41,10 @@ Servo pulley;
 Servo steers[4];  // create an array of servo objects to control 4 servos
 int calbration[4] = { 5, 0, -7, -6 };
 
+// Beeper
+int BUZZER_PIN = 15;
+int pulleyint = 29;
+
 void setup() {
     Serial.begin(115200);
 
@@ -83,6 +87,17 @@ void setup() {
     bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_1);
     bmp.setOutputDataRate(BMP3_ODR_200_HZ);
 
+    pinMode(BUZZER_PIN, OUTPUT); // set the buzzer pin as output
+
+    // play two beeps to signal the system is ready
+    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on
+    delay(200); // wait for 200ms
+    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
+    delay(300); // wait for 300ms
+    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on again
+    delay(200); // wait for 200ms
+    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
+
     if (DEBUG) Serial.println("AccelRateX,AccelRateY,AccelRateZ,GyroRateX,GyroRateY,GyroRateZ,Altitude");
 }
 
@@ -98,7 +113,15 @@ int16_t readMPU6050(int address, uint8_t registerAddress) {
 int16_t accX, accY, accZ, gyroX, gyroY, gyroZ;
 float accelRateX, accelRateY, accelRateZ, gyroRateX, gyroRateY, gyroRateZ, altitude;
 
+bool calibrate = false;
+float accelRateX_c = 0, accelRateY_c = 0, accelRateZ_c=0, gyroRateX_c=0, gyroRateY_c=0, gyroRateZ_c= 0;
+float altitude_c = 0.0;
+
+int i = 0 ;
+
 void loop() {
+    analogWrite(pulleyint, 255);
+
     // Read accelerometer data
     accX = readMPU6050(MPU6050_ADDRESS, 0x3B);
     accY = readMPU6050(MPU6050_ADDRESS, 0x3D);
@@ -116,14 +139,42 @@ void loop() {
     }
 
     // Convert accelerometer data to g's
-    accelRateX = accX / ACCEL_SCALE_MODIFIER_16G; // For ±16g sensitivity
+    accelRateX = accX / ACCEL_SCALE_MODIFIER_16G;
     accelRateY = accY / ACCEL_SCALE_MODIFIER_16G;
     accelRateZ = accZ / ACCEL_SCALE_MODIFIER_16G;
 
     // Convert gyro data to degrees per second
-    gyroRateX = gyroX / GYRO_SCALE_MODIFIER_250DEG; // For ±250 deg/s sensitivity
+    gyroRateX = gyroX / GYRO_SCALE_MODIFIER_250DEG;
     gyroRateY = gyroY / GYRO_SCALE_MODIFIER_250DEG;
     gyroRateZ = gyroZ / GYRO_SCALE_MODIFIER_250DEG;
+
+    // altitude in meters
+    altitude = bmp.readAltitude(SEA_LEVEL_PRESSURE_HPA);
+
+    // apply all calibration values
+    accelRateX -= accelRateX_c;
+    accelRateY -= accelRateY_c;
+    accelRateZ -= accelRateZ_c;
+
+    gyroRateX -= gyroRateX_c;
+    gyroRateY -= gyroRateY_c;
+    gyroRateZ -= gyroRateZ_c;
+
+    altitude -= altitude_c;
+
+    if (!calibrate) {
+        accelRateX_c = accX;
+        accelRateY_c = accY;
+        accelRateZ_c = accZ;
+
+        gyroRateX_c = gyroX;
+        gyroRateY_c = gyroY;
+        gyroRateZ_c = gyroZ;
+
+        altitude_c = altitude;
+
+        calibrate = true;
+    }
 
     if (DEBUG) {
         Serial.print(accelRateX);
