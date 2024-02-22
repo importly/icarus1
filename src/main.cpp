@@ -101,10 +101,10 @@ float altitude_c = 0.0;
 
 int i = 0;
 
-double kalPitch;
-double kalRoll;
-double accPitch;
-double accRoll;
+double kal_pitch;
+double kal_roll;
+double acc_pitch;
+double acc_roll;
 
 int servo_translate(int pos) {
     return pos + 90;
@@ -121,11 +121,11 @@ void loop() {
     Vector gyr = mpu.readNormalizeGyro();
 
 
-    accPitch = -(atan2(acc.XAxis, sqrt(acc.YAxis*acc.YAxis + acc.ZAxis*acc.ZAxis))*180.0)/M_PI;
-    accRoll  = (atan2(acc.YAxis, acc.ZAxis)*180.0)/M_PI - 90;
+    acc_pitch = -(atan2(acc.XAxis, sqrt(acc.YAxis * acc.YAxis + acc.ZAxis * acc.ZAxis)) * 180.0) / M_PI;
+    acc_roll  = (atan2(acc.YAxis, acc.ZAxis) * 180.0) / M_PI - 90;
 
-//    kalPitch = kalman_acc_X.update(accPitch, gyr.YAxis);
-//    kalRoll = kalman_acc_Y.update(accRoll, gyr.XAxis);
+//    kal_pitch = kalman_acc_X.update(acc_pitch, gyr.YAxis);
+//    kal_roll = kalman_acc_Y.update(acc_roll, gyr.XAxis);
 
     // altitude in meters
     altitude = bmp.readAltitude(SEA_LEVEL_PRESSURE_HPA);
@@ -137,14 +137,14 @@ void loop() {
         calibrate = true;
     }
 
-    int servoPositionx = -accPitch;
-    int servoPositiony = accRoll;
+    int servo_position_X = -acc_pitch;
+    int servo_position_Y = acc_roll;
 
     // Assign the converted integer to all the servos
-    sx1.write(servo_translate(servoPositionx));
-    sx2.write(servo_translate(-servoPositionx));
-    sy1.write(servo_translate(servoPositiony));
-    sy2.write(servo_translate(-servoPositiony));
+    sx1.write(servo_translate(servo_position_X));
+    sx2.write(servo_translate(-servo_position_X));
+    sy1.write(servo_translate(servo_position_Y));
+    sy2.write(servo_translate(-servo_position_Y));
 
     if (DEBUG) {
         char buffer[100];  // Buffer to hold the formatted string
