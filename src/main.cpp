@@ -117,9 +117,9 @@ void loop() {
         Serial.println("Failed to perform reading :(");
         return;
     }
+
     Vector acc = mpu.readNormalizeAccel();
     Vector gyr = mpu.readNormalizeGyro();
-
 
     acc_pitch = -(atan2(acc.XAxis, sqrt(acc.YAxis * acc.YAxis + acc.ZAxis * acc.ZAxis)) * 180.0) / M_PI;
     acc_roll  = (atan2(acc.YAxis, acc.ZAxis) * 180.0) / M_PI - 90;
@@ -129,7 +129,6 @@ void loop() {
 
     // altitude in meters
     altitude = bmp.readAltitude(SEA_LEVEL_PRESSURE_HPA);
-
     altitude -= altitude_c;
 
     if (!calibrate) {
