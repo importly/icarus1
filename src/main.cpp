@@ -19,21 +19,23 @@ Adafruit_BMP3XX bmp;
 MPU6050 mpu;
 
 Servo pulley;
-Servo steers[4];  // create an array of servo objects to control 4 servos
-int calbration[4] = { 5, 0, -7, -6 };
+
+Servo sx1;
+Servo sx2;
+Servo sy1;
+Servo sy2;
 
 // Beeper
-int BUZZER_PIN = 15;
-int pulleyint = 29;
+int BUZZER_PIN = 36;
+int PULLEY_PIN = 29;
 
-KalmanFilter kalmanX(0.001, 0.003, 0.03);
-KalmanFilter kalmanY(0.001, 0.003, 0.03);
+KalmanFilter kalman_gyro_X(0.001, 0.003, 0.03);
+KalmanFilter kalman_gyro_Y(0.001, 0.003, 0.03);
+KalmanFilter kalman_gyro_Z(0.001, 0.003, 0.03);
 
-float accPitch = 0;
-float accRoll = 0;
-
-float kalPitch = 0;
-float kalRoll = 0;
+KalmanFilter kalman_acc_X(0.001, 0.003, 0.03);
+KalmanFilter kalman_acc_Y(0.001, 0.003, 0.03);
+KalmanFilter kalman_acc_Z(0.001, 0.003, 0.03);
 
 void setup() {
     Serial.begin(115200);
@@ -44,7 +46,7 @@ void setup() {
     else while (true) { Serial.println("Could not find a valid BMP390 sensor, check wiring!"); }
 
     // MPU6050
-    if (mpu.begin(MPU6050_SCALE_250DPS, MPU6050_RANGE_16G))
+    if (mpu.begin(MPU6050_SCALE_250DPS, MPU6050_RANGE_16G, 0x68))
         Serial.println("Found MPU6050");
     else while (true) { Serial.println("Could not find a valid MPU6050 sensor, check wiring!"); }
 
@@ -55,20 +57,30 @@ void setup() {
     bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_1);
     bmp.setOutputDataRate(BMP3_ODR_200_HZ);
 
+    mpu.calibrateGyro(100);
+    Serial.println(mpu.getAccelOffsetX());
+    Serial.println(mpu.getAccelOffsetY());
+    Serial.println(mpu.getAccelOffsetZ());
+
+    for (int i = 0; i < 100; i++) {
+        bmp.performReading();
+    }
+
+    sx1.attach(3);
+    sx2.attach(7);
+    sy1.attach(10);
+    sy2.attach(25);
 
     pinMode(BUZZER_PIN, OUTPUT); // set the buzzer pin as output
 
-    // play two beeps to signal the system is ready
-    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on
-    delay(200); // wait for 200ms
-    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
-    delay(300); // wait for 300ms
-    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on again
-    delay(200); // wait for 200ms
-    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
-
-
-    mpu.calibrateGyro();
+//    // play two beeps to signal the system is ready
+//    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on
+//    delay(100); // wait for 200ms
+//    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
+//    delay(150); // wait for 300ms
+//    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on again
+//    delay(100); // wait for 200ms
+//    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
 
     if (DEBUG) Serial.println("AccelRateX,AccelRateY,AccelRateZ,GyroRateX,GyroRateY,GyroRateZ,Altitude");
 }
@@ -82,32 +94,38 @@ int16_t readMPU6050(int address, uint8_t registerAddress) {
     return data;
 }
 
-float accelRateX, accelRateY, accelRateZ, gyroRateX, gyroRateY, gyroRateZ, altitude;
+float accelX, accelY, accelZ, gyroX, gyroY, gyroZ, altitude;
 
 bool calibrate = false;
 float altitude_c = 0.0;
 
-int i = 0 ;
+int i = 0;
+
+double kalPitch;
+double kalRoll;
+double accPitch;
+double accRoll;
+
+int servo_translate(int pos) {
+    return pos + 90;
+}
+
 
 void loop() {
-    analogWrite(pulleyint, 255);
-
     // Read pressure data
     if (!bmp.performReading()) {
         Serial.println("Failed to perform reading :(");
         return;
     }
-
     Vector acc = mpu.readNormalizeAccel();
     Vector gyr = mpu.readNormalizeGyro();
 
-    // Calculate Pitch & Roll from accelerometer (deg)
-    accPitch = -(atan2(acc.XAxis, sqrt(acc.YAxis*acc.YAxis + acc.ZAxis*acc.ZAxis))*180.0)/M_PI;
-    accRoll  = (atan2(acc.YAxis, acc.ZAxis)*180.0)/M_PI;
 
-    // Kalman filter
-    kalPitch = kalmanY.update(accPitch, gyr.YAxis);
-    kalRoll = kalmanX.update(accRoll, gyr.XAxis);
+    accPitch = -(atan2(acc.XAxis, sqrt(acc.YAxis*acc.YAxis + acc.ZAxis*acc.ZAxis))*180.0)/M_PI;
+    accRoll  = (atan2(acc.YAxis, acc.ZAxis)*180.0)/M_PI - 90;
+
+//    kalPitch = kalman_acc_X.update(accPitch, gyr.YAxis);
+//    kalRoll = kalman_acc_Y.update(accRoll, gyr.XAxis);
 
     // altitude in meters
     altitude = bmp.readAltitude(SEA_LEVEL_PRESSURE_HPA);
@@ -116,46 +134,23 @@ void loop() {
 
     if (!calibrate) {
         altitude_c = altitude;
-
         calibrate = true;
     }
 
+    int servoPositionx = -accPitch;
+    int servoPositiony = accRoll;
+
+    // Assign the converted integer to all the servos
+    sx1.write(servo_translate(0));
+    sx2.write(servo_translate(-0));
+    sy1.write(servo_translate(0));
+    sy2.write(servo_translate(-0));
+
     if (DEBUG) {
+        char buffer[100];  // Buffer to hold the formatted string
+        sprintf(buffer, "%4.2f %4.2f", accPitch, accRoll);
+        Serial.println(buffer);
 
-        Serial.print(accPitch);
-        Serial.print(":");
-        Serial.print(accRoll);
-        Serial.print(":");
-        Serial.print(kalPitch);
-        Serial.print(":");
-        Serial.print(kalRoll);
-        Serial.print(":");
-        Serial.print(acc.XAxis);
-        Serial.print(":");
-        Serial.print(acc.YAxis);
-        Serial.print(":");
-        Serial.print(acc.ZAxis);
-        Serial.print(":");
-        Serial.print(gyr.XAxis);
-        Serial.print(":");
-        Serial.print(gyr.YAxis);
-        Serial.print(":");
-        Serial.print(gyr.ZAxis);
-
-        Serial.println();
-//        Serial.print(accelRateX);
-//        Serial.print(",");
-//        Serial.print(accelRateY);
-//        Serial.print(",");
-//        Serial.println(accelRateZ);
-//        Serial.print(",");
-//        Serial.print(gyroRateX);
-//        Serial.print(",");
-//        Serial.print(gyroRateY);
-//        Serial.print(",");
-//        Serial.print(gyroRateZ);
-//        Serial.print(",");
-//        Serial.println(altitude);
     }
     delay(50);
 }
