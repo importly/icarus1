@@ -148,9 +148,8 @@ void loop() {
 
     if (DEBUG) {
         char buffer[100];  // Buffer to hold the formatted string
-        sprintf(buffer, "%4.2f %4.2f", accPitch, accRoll);
+        sprintf(buffer, "%4.2f %4.2f %4.2f", acc.XAxis, acc.YAxis,acc.ZAxis);
         Serial.println(buffer);
-
     }
     delay(50);
 }
