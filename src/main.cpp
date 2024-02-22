@@ -141,10 +141,10 @@ void loop() {
     int servoPositiony = accRoll;
 
     // Assign the converted integer to all the servos
-    sx1.write(servo_translate(0));
-    sx2.write(servo_translate(-0));
-    sy1.write(servo_translate(0));
-    sy2.write(servo_translate(-0));
+    sx1.write(servo_translate(servoPositionx));
+    sx2.write(servo_translate(-servoPositionx));
+    sy1.write(servo_translate(servoPositiony));
+    sy2.write(servo_translate(-servoPositiony));
 
     if (DEBUG) {
         char buffer[100];  // Buffer to hold the formatted string
