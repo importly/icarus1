@@ -26,8 +26,12 @@ Servo sy1;
 Servo sy2;
 
 // Beeper
-int BUZZER_PIN = 36;
-int PULLEY_PIN = 29;
+const int BUZZER_PIN = 36;
+const int PULLEY_PIN = 29;
+const int SX1_PIN = 3;
+const int SX2_PIN = 7;
+const int SY1_PIN = 10;
+const int SY2_PIN = 25;
 
 KalmanFilter kalman_gyro_X(0.001, 0.003, 0.03);
 KalmanFilter kalman_gyro_Y(0.001, 0.003, 0.03);
@@ -66,10 +70,10 @@ void setup() {
         bmp.performReading();
     }
 
-    sx1.attach(3);
-    sx2.attach(7);
-    sy1.attach(10);
-    sy2.attach(25);
+    sx1.attach(SX1_PIN);
+    sx2.attach(SX2_PIN);
+    sy1.attach(SY1_PIN);
+    sy2.attach(SY2_PIN);
 
     pinMode(BUZZER_PIN, OUTPUT); // set the buzzer pin as output
 
@@ -124,7 +128,7 @@ void loop() {
     acc_pitch = -(atan2(acc.XAxis, sqrt(acc.YAxis * acc.YAxis + acc.ZAxis * acc.ZAxis)) * 180.0) / M_PI;
     acc_roll  = (atan2(acc.YAxis, acc.ZAxis) * 180.0) / M_PI - 90;
 
-//    kal_pitch = kalman_acc_X.update(acc_pitch, gyr.YAxis);
+    kal_pitch = kalman_acc_X.update(acc_pitch, gyr.YAxis);
 //    kal_roll = kalman_acc_Y.update(acc_roll, gyr.XAxis);
 
     // altitude in meters
@@ -147,7 +151,7 @@ void loop() {
 
     if (DEBUG) {
         char buffer[100];  // Buffer to hold the formatted string
-        sprintf(buffer, "%4.2f %4.2f %4.2f", acc.XAxis, acc.YAxis,acc.ZAxis);
+        sprintf(buffer, "%4.2f %4.2f %4.2f %4.2f", acc.XAxis, acc.YAxis,acc.ZAxis, kal_pitch);
         Serial.println(buffer);
     }
     delay(50);
