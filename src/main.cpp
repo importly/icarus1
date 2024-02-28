@@ -4,9 +4,11 @@
 #include <Adafruit_BMP3XX.h>
 #include <rocket_log.h>
 #include <MPU6050.h>
-#include <KalmanFilter.h>
+
 #include <SD.h>
 #include <SPI.h>
+
+#include "../lib/KalmanFilter-master/Kalman.h"
 
 #define DEBUG 1
 #define SEA_LEVEL_PRESSURE_HPA (1013.25)
@@ -26,20 +28,16 @@ Servo sy1;
 Servo sy2;
 
 // Beeper
-const int BUZZER_PIN = 36;
-const int PULLEY_PIN = 29;
-const int SX1_PIN = 3;
-const int SX2_PIN = 7;
-const int SY1_PIN = 10;
-const int SY2_PIN = 25;
+int BUZZER_PIN = 36;
+int PULLEY_PIN = 29;
 
-KalmanFilter kalman_gyro_X(0.001, 0.003, 0.03);
-KalmanFilter kalman_gyro_Y(0.001, 0.003, 0.03);
-KalmanFilter kalman_gyro_Z(0.001, 0.003, 0.03);
+Kalman kalman_gyro_X;
+Kalman kalman_gyro_Y;
+Kalman kalman_gyro_Z;
 
-KalmanFilter kalman_acc_X(0.001, 0.003, 0.03);
-KalmanFilter kalman_acc_Y(0.001, 0.003, 0.03);
-KalmanFilter kalman_acc_Z(0.001, 0.003, 0.03);
+Kalman kalman_acc_X;
+Kalman kalman_acc_Y;
+Kalman kalman_acc_Z;
 
 void setup() {
     Serial.begin(115200);
@@ -70,10 +68,10 @@ void setup() {
         bmp.performReading();
     }
 
-    sx1.attach(SX1_PIN);
-    sx2.attach(SX2_PIN);
-    sy1.attach(SY1_PIN);
-    sy2.attach(SY2_PIN);
+    sx1.attach(3);
+    sx2.attach(7);
+    sy1.attach(10);
+    sy2.attach(25);
 
     pinMode(BUZZER_PIN, OUTPUT); // set the buzzer pin as output
 
@@ -105,10 +103,10 @@ float altitude_c = 0.0;
 
 int i = 0;
 
-double kal_pitch;
-double kal_roll;
-double acc_pitch;
-double acc_roll;
+double kalPitch;
+double kalRoll;
+double accPitch;
+double accRoll;
 
 int servo_translate(int pos) {
     return pos + 90;
@@ -121,18 +119,22 @@ void loop() {
         Serial.println("Failed to perform reading :(");
         return;
     }
-
     Vector acc = mpu.readNormalizeAccel();
     Vector gyr = mpu.readNormalizeGyro();
 
-    acc_pitch = -(atan2(acc.XAxis, sqrt(acc.YAxis * acc.YAxis + acc.ZAxis * acc.ZAxis)) * 180.0) / M_PI;
-    acc_roll  = (atan2(acc.YAxis, acc.ZAxis) * 180.0) / M_PI - 90;
 
-    kal_pitch = kalman_acc_X.update(acc_pitch, gyr.YAxis);
-//    kal_roll = kalman_acc_Y.update(acc_roll, gyr.XAxis);
+    accPitch = -(atan2(acc.XAxis, sqrt(acc.YAxis*acc.YAxis + acc.ZAxis*acc.ZAxis))*180.0)/M_PI;
+    accRoll  = (atan2(acc.YAxis, acc.ZAxis)*180.0)/M_PI - 90;
+
+    //dt is the time between readings in seconds
+    //TODO: Adust as necessary
+    float dt = 0.05;
+    kalPitch = kalman_acc_X.getAngle(accPitch, gyr.YAxis, dt);
+    kalRoll = kalman_acc_Y.getAngle(accRoll, gyr.XAxis, dt);
 
     // altitude in meters
     altitude = bmp.readAltitude(SEA_LEVEL_PRESSURE_HPA);
+
     altitude -= altitude_c;
 
     if (!calibrate) {
@@ -140,18 +142,18 @@ void loop() {
         calibrate = true;
     }
 
-    int servo_position_X = -acc_pitch;
-    int servo_position_Y = acc_roll;
+    int servoPositionx = -kalPitch;
+    int servoPositiony = kalRoll;
 
     // Assign the converted integer to all the servos
-    sx1.write(servo_translate(servo_position_X));
-    sx2.write(servo_translate(-servo_position_X));
-    sy1.write(servo_translate(servo_position_Y));
-    sy2.write(servo_translate(-servo_position_Y));
+    sx1.write(servo_translate(servoPositionx));
+    sx2.write(servo_translate(-servoPositionx));
+    sy1.write(servo_translate(servoPositiony));
+    sy2.write(servo_translate(-servoPositiony));
 
     if (DEBUG) {
         char buffer[100];  // Buffer to hold the formatted string
-        sprintf(buffer, "%4.2f %4.2f %4.2f %4.2f", acc.XAxis, acc.YAxis,acc.ZAxis, kal_pitch);
+        sprintf(buffer, "%4.2f %4.2f %4.2f", acc.XAxis, acc.YAxis,acc.ZAxis);
         Serial.println(buffer);
     }
     delay(50);
