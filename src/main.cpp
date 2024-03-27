@@ -8,7 +8,6 @@
 #include <SD.h>
 #include <SPI.h>
 
-#define DEBUG 1
 #define SEA_LEVEL_PRESSURE_HPA (1013.25)
 
 // I2C addresses
@@ -40,6 +39,44 @@ KalmanFilter kalman_gyro_Z(0.001, 0.003, 0.03);
 KalmanFilter kalman_acc_X(0.001, 0.003, 0.03);
 KalmanFilter kalman_acc_Y(0.001, 0.003, 0.03);
 KalmanFilter kalman_acc_Z(0.001, 0.003, 0.03);
+
+bool SILENT = true;
+bool DEBUG = true;
+
+float altitude=0.0;
+
+bool calibrate = false;
+float altitude_c = 0.0;
+
+int i = 0;
+
+double kal_pitch;
+double kal_roll;
+double acc_pitch;
+double acc_roll;
+
+int servo_translate(int pos) {
+    return pos + 90;
+}
+
+enum RocketState {
+    IDLE,
+    BOOST,
+    COAST,
+    APOGEE,
+    LANDING,
+};
+
+RocketState rocket_state = IDLE;
+unsigned long rocket_start_t = 0;
+unsigned long rocket_boost_t = 0;
+unsigned long rocket_coast_t = 0;
+
+int servo_position_x = 0;
+int servo_position_y = 0;
+
+float target_altitude = 850;
+
 
 void setup() {
     Serial.begin(115200);
@@ -77,43 +114,18 @@ void setup() {
 
     pinMode(BUZZER_PIN, OUTPUT); // set the buzzer pin as output
 
-//    // play two beeps to signal the system is ready
-//    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on
-//    delay(100); // wait for 200ms
-//    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
-//    delay(150); // wait for 300ms
-//    digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on again
-//    delay(100); // wait for 200ms
-//    digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
-
+    // play two beeps to signal the system is ready
+    if (!SILENT) {
+        digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on
+        delay(100); // wait for 200ms
+        digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
+        delay(150); // wait for 300ms
+        digitalWrite(BUZZER_PIN, HIGH); // turn the buzzer on again
+        delay(100); // wait for 200ms
+        digitalWrite(BUZZER_PIN, LOW); // turn the buzzer off
+    }
     if (DEBUG) Serial.println("AccelRateX,AccelRateY,AccelRateZ,GyroRateX,GyroRateY,GyroRateZ,Altitude");
 }
-
-int16_t readMPU6050(int address, uint8_t registerAddress) {
-    Wire.beginTransmission(address);
-    Wire.write(registerAddress);
-    Wire.endTransmission(false);
-    Wire.requestFrom(address, 2);
-    int16_t data = Wire.read() << 8 | Wire.read();
-    return data;
-}
-
-float accelX, accelY, accelZ, gyroX, gyroY, gyroZ, altitude;
-
-bool calibrate = false;
-float altitude_c = 0.0;
-
-int i = 0;
-
-double kal_pitch;
-double kal_roll;
-double acc_pitch;
-double acc_roll;
-
-int servo_translate(int pos) {
-    return pos + 90;
-}
-
 
 void loop() {
     // Read pressure data
@@ -125,12 +137,6 @@ void loop() {
     Vector acc = mpu.readNormalizeAccel();
     Vector gyr = mpu.readNormalizeGyro();
 
-    acc_pitch = -(atan2(acc.XAxis, sqrt(acc.YAxis * acc.YAxis + acc.ZAxis * acc.ZAxis)) * 180.0) / M_PI;
-    acc_roll  = (atan2(acc.YAxis, acc.ZAxis) * 180.0) / M_PI - 90;
-
-    kal_pitch = kalman_acc_X.update(acc_pitch, gyr.YAxis);
-//    kal_roll = kalman_acc_Y.update(acc_roll, gyr.XAxis);
-
     // altitude in meters
     altitude = bmp.readAltitude(SEA_LEVEL_PRESSURE_HPA);
     altitude -= altitude_c;
@@ -140,14 +146,48 @@ void loop() {
         calibrate = true;
     }
 
-    int servo_position_X = -acc_pitch;
-    int servo_position_Y = acc_roll;
+    // altitude to feet
+    altitude *= 3.28084;
 
-    // Assign the converted integer to all the servos
-    sx1.write(servo_translate(servo_position_X));
-    sx2.write(servo_translate(-servo_position_X));
-    sy1.write(servo_translate(servo_position_Y));
-    sy2.write(servo_translate(-servo_position_Y));
+
+    switch (rocket_state) {
+        case IDLE:
+            if ((millis() - rocket_start_t > 5000) && (acc.ZAxis > 50 || acc.YAxis > 50 || acc.XAxis > 50)) { //TODO check acc
+                rocket_state = BOOST;
+                rocket_boost_t = millis();
+            }
+            break;
+        case BOOST:
+            if (millis() - rocket_boost_t > 500 && acc.ZAxis < 0) {
+                rocket_state = COAST;
+                rocket_coast_t = millis();
+            }
+            break;
+        case COAST:
+            acc_pitch = -(atan2(acc.XAxis, sqrt(acc.YAxis * acc.YAxis + acc.ZAxis * acc.ZAxis)) * 180.0) / M_PI;
+            acc_roll  = (atan2(acc.YAxis, acc.ZAxis) * 180.0) / M_PI - 90;
+
+            kal_pitch = kalman_acc_X.update(acc_pitch, gyr.YAxis);
+            //    kal_roll = kalman_acc_Y.update(acc_roll, gyr.XAxis);
+
+            servo_position_x = -acc_pitch;
+            servo_position_y = acc_roll;
+
+            // Assign the converted integer to all the servos
+            sx1.write(servo_translate(servo_position_x));
+            sx2.write(servo_translate(-servo_position_x));
+            sy1.write(servo_translate(servo_position_y));
+            sy2.write(servo_translate(-servo_position_y));
+
+            if (millis() - rocket_coast_t  > 2000 && altitude > target_altitude ) {
+                rocket_state = APOGEE;
+            }
+            break;
+        case APOGEE:
+            break;
+        case LANDING:
+            break;
+    }
 
     if (DEBUG) {
         char buffer[100];  // Buffer to hold the formatted string
