@@ -86,7 +86,8 @@ float target_altitude = 820.0 / 3.28084;
 double kal_pitch;
 double kal_roll;
 
-float dt = 0.4;
+float dt = 0.05;
+float dt_kal = 0.4
 
 Vector acc_sensor_data;
 Vector gyr_sensor_data;
@@ -195,9 +196,9 @@ void loop() {
     vel.y += 0.5 * (acc.y + last_acc.y) * dt;
     vel.z += 0.5 * (acc.z - 9.81 + last_acc.z) * dt;
 
-    kal_velocity = Vec3d(kalman_vel_X.getAngle(vel.x, (acc - last_acc).magnitude(), dt),
-                         kalman_vel_Y.getAngle(vel.y, (acc - last_acc).magnitude(), dt),
-                         kalman_vel_Z.getAngle(vel.z, (acc - last_acc).magnitude(), dt));
+    kal_velocity = Vec3d(kalman_vel_X.getAngle(vel.x, (acc - last_acc).magnitude(), dt_kal),
+                         kalman_vel_Y.getAngle(vel.y, (acc - last_acc).magnitude(), dt_kal),
+                         kalman_vel_Z.getAngle(vel.z, (acc - last_acc).magnitude(), dt_kal));
 
 
     acc_pitch = -degrees(atan2(acc.x, sqrt(acc.y * acc.y + acc.z * acc.z)));
@@ -207,8 +208,8 @@ void loop() {
 
     //dt is the time between readings in seconds
     //TODO: Adust as necessary
-    kal_pitch = kalman_acc_X.getAngle(acc_pitch, gyr.y, dt);
-    kal_roll = kalman_acc_Y.getAngle(acc_roll, gyr.y, dt);
+    kal_pitch = kalman_acc_X.getAngle(acc_pitch, gyr.y,dt_kal);
+    kal_roll = kalman_acc_Y.getAngle(acc_roll, gyr.y, dt_kal);
 
     // Assuming h_target, h_current, k, v (velocity), m (mass), and g (gravitational constant) are already defined
 
